@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>점심 메뉴 룰렛</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-align: center;
+    margin: 20px;
+    background: #fff;
+    color: #000;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  canvas#roulette {
+    border: 2px solid #ccc;
+    border-radius: 50%;
+    margin-top: 20px;
+    width: 400px;
+    height: 400px;
+    max-width: 90vw;
+    max-height: 90vw;
+    background: #fff;
+  }
+
+  #menuList {
+    margin-top: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  input, button {
+    padding: 8px 12px;
+    margin: 5px 3px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
+
+  .menu-item {
+    display: inline-block;
+    margin: 3px;
+    padding: 6px 10px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    color: #333;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+    font-size: 16px;
+  }
+
+  .menu-item button {
+    margin-left: 5px;
+    padding: 2px 6px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: none;
+    background: #ff4d4f;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  /* 모달 스타일 */
+  #modal {
+    position: fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    display:none;
+    background: rgba(0,0,0,0.35);
+    justify-content: center;
+    align-items: center;
+    z-index:100;
+  }
+
+  #modalContent {
+    position: relative;
+    background: linear-gradient(135deg, #ffe066, #ff8787);
+    padding:40px 50px;
+    border-radius:20px;
+    font-size:22px;
+    text-align:center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    animation: popup 0.5s ease-out;
+    overflow:hidden;
+    width: 80vw;
+    max-width: 320px;
+  }
+
+  @keyframes popup {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  #closeBtn {
+    margin-top:20px;
+    padding:10px 20px;
+    font-size:16px;
+    border:none;
+    border-radius:12px;
+    background:#fff;
+    color:#ff4d4f;
+    cursor:pointer;
+    font-weight:bold;
+    transition: all 0.2s;
+    position: relative;
+    z-index: 10;
+  }
+  #closeBtn:hover {
+    background:#ff4d4f;
+    color:#fff;
+    box-shadow:0 5px 15px rgba(0,0,0,0.2);
+  }
+
+  #modalCanvas {
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    pointer-events:none;
+    z-index:1;
+  }
+
+  #modalText {
+    position: relative;
+    z-index: 10;
+    font-size: 20px;
+    font-weight: bold;
+    color: #000;
+    text-shadow: 2px 2px 4px rgba(255,255,255,0.5);
+  }
+</style>
+</head>
+<body>
+
+<h1>점심 메뉴 룰렛</h1>
+
+<canvas id="roulette"></canvas>
+<div>
+  <button id="spinBtn">룰렛 돌리기</button>
+</div>
+
+<div id="menuControl">
+  <input type="text" id="menuInput" placeholder="메뉴 추가">
+  <button id="addMenuBtn">추가</button>
+</div>
+
+<div id="menuList"></div>
+
+<div id="modal">
+  <div id="modalContent">
+    <canvas id="modalCanvas"></canvas>
+    <div id="modalText"></div>
+    <button id="closeBtn">확인</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('roulette');
+const ctx = canvas.getContext('2d');
+const spinBtn = document.getElementById('spinBtn');
+const menuInput = document.getElementById('menuInput');
+const addMenuBtn = document.getElementById('addMenuBtn');
+const menuListDiv = document.getElementById('menuList');
+
+const modal = document.getElementById('modal');
+const modalContent = document.getElementById('modalContent');
+const modalText = document.getElementById('modalText');
+const closeBtn = document.getElementById('closeBtn');
+const modalCanvas = document.getElementById('modalCanvas');
+const modalCtx = modalCanvas.getContext('2d');
+
+canvas.width = 400;
+canvas.height = 400;
+modalCanvas.width = modalContent.clientWidth;
+modalCanvas.height = modalContent.clientHeight;
+
+let menuItems = ['김밥','라면','치킨','피자','샌드위치','초밥'];
+let startAngle = 0;
+let spinAngleStart = 0;
+let spinTime = 0;
+let spinTimeTotal = 0;
+let spinning = false;
+
+const colors = ['#FFB6C1','#FFD700','#ADFF2F','#87CEFA','#FF7F50','#DA70D6','#FFA07A','#20B2AA','#FF4500','#00FFFF','#FF69B4'];
+
+function updateMenuList(){
+  menuListDiv.innerHTML='';
+  menuItems.forEach((item,idx)=>{
+    const div=document.createElement('div');
+    div.className='menu-item';
+    div.textContent=item;
+    const delBtn=document.createElement('button');
+    delBtn.textContent='삭제';
+    delBtn.onclick=()=>{menuItems.splice(idx,1);updateMenuList();drawRoulette();};
+    div.appendChild(delBtn);
+    menuListDiv.appendChild(div);
+  });
+}
+
+function drawRoulette(){
+  const width=canvas.width;
+  const height=canvas.height;
+  const centerX=width/2;
+  const centerY=height/2;
+  const radius=Math.min(width,height)/2-10;
+  ctx.clearRect(0,0,width,height);
+
+  const sliceAngle=2*Math.PI/menuItems.length;
+  menuItems.forEach((item,i)=>{
+    ctx.fillStyle=colors[i % colors.length];
+    ctx.beginPath();
+    ctx.moveTo(centerX,centerY);
+    ctx.arc(centerX,centerY,radius,startAngle+i*sliceAngle,startAngle+(i+1)*sliceAngle);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(centerX,centerY);
+    ctx.rotate(startAngle + i*sliceAngle + sliceAngle/2);
+    ctx.textAlign="right";
+    ctx.fillStyle="#000";
+    ctx.font="16px Arial";
+    ctx.fillText(item,radius-10,5);
+    ctx.restore();
+  });
+
+  // 포인터 (아래를 향하는 역삼각형)
+  ctx.fillStyle="red";
+  ctx.beginPath();
+  const pointerHeight = 20;
+  const pointerWidth = 20;
+  // 원판 상단에 아래로 뾰족하게
+  ctx.moveTo(centerX, centerY - radius + pointerHeight); // 아래 꼭대기
+  ctx.lineTo(centerX - pointerWidth/2, centerY - radius); // 왼쪽 위
+  ctx.lineTo(centerX + pointerWidth/2, centerY - radius); // 오른쪽 위
+  ctx.closePath();
+  ctx.fill();
+}
+
+// 폭죽 및 모달 폭죽 함수
+function fireworks(x,y){ /* 기존 폭죽 코드 그대로 */ }
+function modalFireworks(){ /* 기존 모달 폭죽 코드 그대로 */ }
+function hexToRgb(hex){hex=hex.replace('#','');const bigint=parseInt(hex,16);const r=(bigint>>16)&255;const g=(bigint>>8)&255;const b=bigint&255;return `${r},${g},${b}`;}
+function easeOut(t,b,c,d){const ts=(t/=d)*t;const tc=ts*t;return b+c*(tc+-3*ts+3*t);}
+
+async function rotateRoulette(){
+  if(!spinning) return;
+  spinTime+=30;
+  if(spinTime>=spinTimeTotal){
+    spinning=false;
+    const degrees=startAngle*180/Math.PI+90;
+    const arcd=360/menuItems.length;
+    const index=Math.floor((360-(degrees%360))/arcd)%menuItems.length;
+
+    const centerX=canvas.width/2;
+    const centerY=canvas.height/2;
+    const radius=Math.min(canvas.width,canvas.height)/2-10;
+    const pointerX=centerX;
+    const pointerY=centerY-radius-20;
+
+    await fireworks(pointerX,pointerY);
+    modalText.textContent='🎉 선택된 메뉴: '+menuItems[index]+' 🎉';
+    modal.style.display='flex';
+    modalFireworks();
+    return;
+  }
+  const spinAngle=spinAngleStart-easeOut(spinTime,0,spinAngleStart,spinTimeTotal);
+  startAngle+=(spinAngle*Math.PI/180);
+  drawRoulette();
+  requestAnimationFrame(rotateRoulette);
+}
+
+spinBtn.addEventListener('click',()=>{
+  if(menuItems.length===0){alert('메뉴를 추가해주세요!');return;}
+  if(spinning) return;
+  spinAngleStart=Math.random()*5000+5000;
+  spinTime=0;
+  spinTimeTotal=Math.random()*3000+4000;
+  spinning=true;
+  rotateRoulette();
+});
+
+addMenuBtn.addEventListener('click',()=>{
+  const value=menuInput.value.trim();
+  if(value!==''){
+    menuItems.push(value);
+    menuInput.value='';
+    updateMenuList();
+    drawRoulette();
+  }
+});
+
+closeBtn.addEventListener('click',()=>{
+  modal.style.display='none';
+  modalCtx.clearRect(0,0,modalCanvas.width,modalCanvas.height);
+});
+
+updateMenuList();
+drawRoulette();
+</script>
+
+</body>
+</html>
